@@ -1,4 +1,5 @@
-# Scripting Projects.
+# Scripting Projects
 
 - Bash.
 - Azure.
+- Windows.
