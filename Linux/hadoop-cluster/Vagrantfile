@@ -1,0 +1,65 @@
+NODE_COUNT = 2
+BOX_IMAGE = "alvistack/devel-22.04"
+KEY = "vagrant"
+
+Vagrant.configure("2") do |config|
+  config.vm.box = BOX_IMAGE
+  config.vm.boot_timeout = 600
+  config.ssh.username = KEY
+  config.ssh.password = KEY
+  config.ssh.insert_key = false
+
+  # Configuración de la máquina master.
+  config.vm.define "master" do |master|
+    master.vm.network "forwarded_port", guest: 50070, host: 50070
+    master.vm.network "forwarded_port", guest: 8088, host: 8088
+    master.vm.network "private_network", type: "dhcp"
+    master.vm.provider "virtualbox" do |vb|
+      vb.name = "hadoop-master"
+      vb.memory = "6144"
+      vb.cpus = 2
+    end
+
+        # Aprovisionamiento con comandos de actualización.
+        master.vm.provision "shell", inline: <<-SHELL
+        sudo apt-get update
+        sudo apt-get upgrade -y
+        sudo apt autoremove -y
+        sudo apt-get install virtualbox-guest-utils cmake maven openjdk-11-jdk cmdtest -y
+        wget https://dlcdn.apache.org/hadoop/common/hadoop-3.3.6/hadoop-3.3.6.tar.gz
+        tar -xzvf hadoop-3.3.6.tar.gz
+        export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+        export HADOOP_HOME=/home/vagrant/hadoop-3.3.6
+        export HADOOPINSTALL=$HADOOP_HOME
+        export HADOOP_MAPRED_HOME=$HADOOP_HOME
+        export HADOOP_COMMON_HOME=$HADOOP_HOME
+        export HADOOP_HDFS_HOME=$HADOOP_HOME
+        export YARN_HOME=$HADOOP_HOME
+        export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native
+        export PATH=$PATH:$HADOOP_HOME/sbin:$HADOOP_HOME/bin
+        export HADOOP_OPTS="-Djava.library.path=$HADOOP_HOME/lib/native"
+        chmod -R 755 /home/vagrant/hadoop-3.3.6
+        sudo reboot
+      SHELL
+    end
+
+  # Configuración de las máquinas esclavas.
+  (1..NODE_COUNT).each do |i|
+    config.vm.define "slave#{i}" do |slave|
+      slave.vm.network "private_network", type: "dhcp"
+      slave.vm.provider "virtualbox" do |vb|
+        vb.name = "hadoop-slave#{i}"
+        vb.memory = "1024"
+        vb.cpus = 1
+      end
+
+            # Aprovisionamiento con comandos de actualización.
+            slave.vm.provision "shell", inline: <<-SHELL
+            sudo apt-get update
+            sudo apt-get upgrade -y
+            sudo apt-get install virtualbox-guest-utils
+            sudo reboot
+          SHELL
+    end
+  end
+end
