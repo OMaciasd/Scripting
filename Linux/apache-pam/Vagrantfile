@@ -1,0 +1,48 @@
+BOX_IMAGE = "ubuntu/mantic64"
+SERVER = "apache"
+HOSTNAME = "master"
+
+Vagrant.configure("2") do |config|
+  config.vm.define SERVER do |subconfig|
+    subconfig.vm.box = BOX_IMAGE
+    subconfig.vm.hostname = HOSTNAME
+    subconfig.vm.network :private_network, ip: "10.0.0.10"
+    subconfig.vm.provider "virtualbox" do |vb|
+      vb.memory = "1024"
+    end
+  end
+
+  config.vm.provision "shell", inline: <<-SHELL
+    sudo apt-get update
+    sudo apt-get upgrade -y
+    sudo apt-get purge linux-headers-generic ubuntu-advantage-tools -y
+    sudo apt autoremove -y
+    sudo apt-get install apache2 libapache2-mod-authnz-pam -y
+    sudo a2enmod authnz_pam
+    sudo mkdir /var/www/html/test
+    sudo chown www-data:www-data /var/www/html/test -R
+    sudo rm /etc/apache2/sites-enabled/000-default.conf
+    echo "<VirtualHost *:80>" | sudo tee /etc/apache2/sites-enabled/000-default.conf
+    echo "    ServerAdmin webmaster@localhost" | sudo tee -a /etc/apache2/sites-enabled/000-default.conf
+    echo "    DocumentRoot /var/www/html" | sudo tee -a /etc/apache2/sites-enabled/000-default.conf
+    echo "    ErrorLog \${APACHE_LOG_DIR}/error.log" | sudo tee -a /etc/apache2/sites-enabled/000-default.conf
+    echo "    CustomLog \${APACHE_LOG_DIR}/access.log combined" | sudo tee -a /etc/apache2/sites-enabled/000-default.conf
+    echo "<Directory \"/var/www/html/test\">" | sudo tee -a /etc/apache2/sites-enabled/000-default.conf
+    echo "    AuthType Basic" | sudo tee -a /etc/apache2/sites-enabled/000-default.conf
+    echo "    AuthName \"private area\"" | sudo tee -a /etc/apache2/sites-enabled/000-default.conf
+    echo "    AuthBasicProvider PAM" | sudo tee -a /etc/apache2/sites-enabled/000-default.conf
+    echo "    AuthPAMService apache" | sudo tee -a /etc/apache2/sites-enabled/000-default.conf
+    echo "    Require valid-user" | sudo tee -a /etc/apache2/sites-enabled/000-default.conf
+    echo "</Directory>" | sudo tee -a /etc/apache2/sites-enabled/000-default.conf
+    echo "</VirtualHost>" | sudo tee -a /etc/apache2/sites-enabled/000-default.conf
+    echo "auth required pam_unix.so" | sudo tee /etc/pam.d/apache
+    echo "account required pam_unix.so" | sudo tee -a /etc/pam.d/apache
+    sudo groupadd -f shadow || true
+    sudo usermod -a -G shadow www-data
+    sudo chown root:shadow /etc/shadow
+    sudo chmod g+r /etc/shadow
+    grep -q '^admin:' /etc/passwd || sudo adduser admin --disabled-password --gecos ""
+    sudo apache2ctl configtest
+    sudo systemctl restart apache2
+  SHELL
+end
